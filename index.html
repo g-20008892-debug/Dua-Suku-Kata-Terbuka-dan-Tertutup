@@ -1,0 +1,911 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lightning-Thunder Lock: Suku Kata Pendidikan Islam Tahun 1</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Google Fonts (Fredoka & Noto Sans Arabic) -->
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&family=Noto+Sans+Arabic:wght@500;700&display=swap" rel="stylesheet">
+    
+    <!-- MediaPipe Hands & Camera Utils CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+
+    <style>
+        body {
+            font-family: 'Fredoka', 'Noto Sans Arabic', sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #311042 100%);
+            color: #ffffff;
+            overflow-x: hidden;
+            user-select: none;
+        }
+
+        /* Lightning Canvas Overlay */
+        #effectsCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 40;
+        }
+
+        /* Glowing card borders */
+        .option-card {
+            transition: all 0.2s ease-out;
+            backdrop-filter: blur(8px);
+        }
+        
+        .option-card.locked {
+            transform: scale(1.05);
+            border-color: #facc15 !important;
+            box-shadow: 0 0 25px rgba(250, 204, 21, 0.8), inset 0 0 15px rgba(250, 204, 21, 0.5);
+            animation: pulse-lock 0.8s infinite alternate;
+        }
+
+        @keyframes pulse-lock {
+            0% { box-shadow: 0 0 15px rgba(250, 204, 21, 0.6); }
+            100% { box-shadow: 0 0 30px rgba(250, 204, 21, 1); }
+        }
+
+        /* Custom Hand Cursor Marker */
+        #handCursor {
+            position: absolute;
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 50;
+            transform: translate(-50%, -50%);
+            transition: transform 0.05s ease;
+        }
+
+        .cursor-open {
+            border: 3px solid #38bdf8;
+            background: rgba(56, 189, 248, 0.3);
+            box-shadow: 0 0 15px #38bdf8;
+        }
+
+        .cursor-fist {
+            border: 4px solid #ef4444;
+            background: rgba(239, 68, 68, 0.6);
+            box-shadow: 0 0 25px #ef4444;
+            transform: translate(-50%, -50%) scale(0.85) !important;
+        }
+
+        /* Slash Animation Effect */
+        .slash-effect {
+            position: absolute;
+            width: 150px;
+            height: 10px;
+            background: linear-gradient(90deg, transparent, #fff, #facc15, transparent);
+            box-shadow: 0 0 20px #facc15;
+            transform: rotate(-45deg);
+            pointer-events: none;
+            z-index: 45;
+            animation: slashAnim 0.35s ease-out forwards;
+        }
+
+        @keyframes slashAnim {
+            0% { opacity: 1; transform: scaleX(0.1) rotate(-45deg); }
+            50% { opacity: 1; transform: scaleX(1.4) rotate(-45deg); }
+            100% { opacity: 0; transform: scaleX(2) rotate(-45deg); }
+        }
+
+        /* Arabic / Malay Large Text Styling */
+        .jawi-text {
+            font-family: 'Noto Sans Arabic', sans-serif;
+            direction: rtl;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between items-center relative p-3 md:p-6">
+
+    <!-- Canvas Kesan Visual (Petir & Slash) -->
+    <canvas id="effectsCanvas"></canvas>
+
+    <!-- Hand Cursor Penunjuk -->
+    <div id="handCursor" class="cursor-open hidden flex items-center justify-center">
+        <div class="w-3 h-3 bg-yellow-300 rounded-full animate-ping"></div>
+    </div>
+
+    <!-- HEADER / STATS BAR -->
+    <header class="w-full max-w-5xl flex flex-wrap justify-between items-center bg-slate-900/80 border border-slate-700/60 rounded-2xl p-4 shadow-xl z-20 gap-3">
+        <!-- Tajuk Game -->
+        <div class="flex items-center space-x-3 space-x-reverse">
+            <span class="text-3xl">⚡</span>
+            <div>
+                <h1 class="text-xl md:text-2xl font-bold bg-gradient-to-r from-yellow-300 via-amber-400 to-orange-500 bg-clip-text text-transparent">
+                    LIGHTNING LOCK
+                </h1>
+                <p class="text-xs text-slate-400">Pendidikan Islam Tahun 1: Suku Kata</p>
+            </div>
+        </div>
+
+        <!-- Status & Stats -->
+        <div class="flex items-center space-x-4 md:space-x-8 text-sm md:text-base font-semibold">
+            <!-- Nyawa -->
+            <div class="flex items-center gap-1 bg-slate-800/80 px-3 py-1.5 rounded-xl border border-rose-500/30">
+                <span class="text-xs text-slate-400 uppercase tracking-wider mr-1">Nyawa:</span>
+                <span id="livesContainer" class="text-xl tracking-widest text-rose-500">❤️❤️❤️</span>
+            </div>
+
+            <!-- Timer -->
+            <div class="flex items-center gap-2 bg-slate-800/80 px-3 py-1.5 rounded-xl border border-cyan-500/30">
+                <span class="text-xs text-slate-400 uppercase tracking-wider">Masa:</span>
+                <span id="timerText" class="text-xl font-bold text-cyan-400">15s</span>
+            </div>
+
+            <!-- Skor -->
+            <div class="flex items-center gap-2 bg-slate-800/80 px-4 py-1.5 rounded-xl border border-yellow-500/30">
+                <span class="text-xs text-slate-400 uppercase tracking-wider">Skor:</span>
+                <span id="scoreText" class="text-2xl font-black text-yellow-400">0</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- MAIN GAME CONTAINER -->
+    <main class="w-full max-w-5xl flex flex-col md:flex-row gap-4 my-4 z-20 items-stretch flex-1">
+        
+        <!-- SEKSYEN WEBCAM & ISYARAT TANGAN -->
+        <section class="w-full md:w-5/12 bg-slate-900/70 border border-indigo-500/30 rounded-2xl p-3 flex flex-col items-center justify-between relative shadow-2xl">
+            <!-- Webcam Container -->
+            <div class="relative w-full aspect-video md:aspect-square bg-slate-950 rounded-xl overflow-hidden border-2 border-slate-700">
+                <video id="webcam" class="w-full h-full object-cover -scale-x-100" playsinline></video>
+                <canvas id="webcamCanvas" class="absolute top-0 left-0 w-full h-full -scale-x-100 pointer-events-none"></canvas>
+
+                <!-- Indicator Gesture Live -->
+                <div class="absolute top-2 left-2 bg-slate-900/90 border border-slate-700 text-xs px-2.5 py-1 rounded-lg flex items-center gap-2">
+                    <span id="gestureDot" class="w-2.5 h-2.5 rounded-full bg-gray-500"></span>
+                    <span id="gestureLabel" class="text-slate-300 font-medium">Mencari Tangan...</span>
+                </div>
+            </div>
+
+            <!-- Panduan Gesture Ringkas -->
+            <div class="w-full mt-3 bg-slate-800/60 p-2.5 rounded-xl border border-slate-700/50 text-xs text-slate-300 flex justify-around items-center">
+                <div class="flex items-center gap-1.5">
+                    <span class="text-lg">🖐️</span>
+                    <span><strong>Kunci:</strong> Halakan Tapak</span>
+                </div>
+                <div class="h-6 w-px bg-slate-700"></div>
+                <div class="flex items-center gap-1.5">
+                    <span class="text-lg">✊</span>
+                    <span><strong>PETIR:</strong> Genggam Tangan</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- SEKSYEN SOALAN & PILIHAN JAWAPAN -->
+        <section class="w-full md:w-7/12 bg-slate-900/70 border border-slate-700/60 rounded-2xl p-4 md:p-6 flex flex-col justify-between shadow-2xl relative">
+            
+            <!-- Soalan Info Header -->
+            <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+                <span id="questionNum" class="text-xs font-bold uppercase tracking-wider text-indigo-400 bg-indigo-950/60 px-3 py-1 rounded-full border border-indigo-800">
+                    Soalan 1 / 10
+                </span>
+                <span id="syllableType" class="text-xs font-semibold text-amber-300 bg-amber-950/50 px-3 py-1 rounded-full border border-amber-800/60">
+                    Suku Kata Terbuka + Tertutup
+                </span>
+            </div>
+
+            <!-- Gambar Visual & Soalan -->
+            <div class="flex flex-col items-center my-3 text-center">
+                <!-- SVG Visual Illustration Box -->
+                <div id="imageIllustration" class="w-36 h-36 md:w-44 md:h-44 bg-slate-800/80 rounded-2xl border-2 border-indigo-500/40 p-3 flex items-center justify-center shadow-inner mb-3 transform hover:scale-105 transition-transform">
+                    <!-- SVG diletakkan secara dinamik -->
+                </div>
+
+                <h2 id="questionText" class="text-xl md:text-2xl font-bold text-slate-100">
+                    Apakah ejaan suku kata yang betul bagi gambar di atas?
+                </h2>
+            </div>
+
+            <!-- Pilihan Jawapan (3 Pilihan) -->
+            <div id="optionsContainer" class="grid grid-cols-1 gap-3 w-full my-2">
+                <!-- 3 Card Jawapan akan diisi menerusi JS -->
+            </div>
+
+            <!-- Bottom Instruction Alert -->
+            <div class="text-center text-xs text-slate-400 mt-1">
+                <p class="hidden md:block">💡 <em>Petua: Boleh juga guna klik Tetikus / Sentuh Skrin jika tiada webcam.</em></p>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- FOOTER -->
+    <footer class="w-full max-w-5xl text-center text-xs text-slate-500 py-1 border-t border-slate-800/80">
+        Pendidikan Islam Tahun 1 • Kemahiran Membaca Suku Kata Terbuka & Tertutup • MediaPipe Interactive Game
+    </footer>
+
+    <!-- OVERLAY SCREEN: START / GAME OVER / VICTORY -->
+    <div id="gameModal" class="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 flex items-center justify-center p-4">
+        <div class="bg-slate-900 border-2 border-yellow-500/50 rounded-3xl p-6 md:p-8 max-w-lg w-full text-center shadow-2xl relative overflow-hidden">
+            
+            <!-- Background Lightning Accent -->
+            <div class="absolute -top-12 -left-12 w-32 h-32 bg-yellow-500/10 rounded-full blur-2xl"></div>
+            <div class="absolute -bottom-12 -right-12 w-32 h-32 bg-indigo-500/10 rounded-full blur-2xl"></div>
+
+            <div id="modalContent">
+                <!-- Content injected dynamically -->
+            </div>
+
+            <button id="modalBtn" onclick="startGame()" class="mt-6 w-full py-4 bg-gradient-to-r from-yellow-400 via-amber-500 to-orange-500 hover:from-yellow-300 hover:to-orange-400 text-slate-950 font-black text-lg rounded-xl shadow-lg shadow-amber-500/25 transform active:scale-95 transition-all cursor-pointer">
+                MULA MAIN ⚡
+            </button>
+        </div>
+    </div>
+
+    <!-- AUDIO GENERATOR VIA WEB AUDIO API -->
+    <script>
+        // Web Audio API Sound Synthesizer (No external audio files required)
+        class SoundEffects {
+            constructor() {
+                this.ctx = null;
+            }
+
+            init() {
+                if (!this.ctx) {
+                    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+            }
+
+            playThunder() {
+                if (!this.ctx) return;
+                const bufferSize = this.ctx.sampleRate * 0.5;
+                const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+                const data = buffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) {
+                    data[i] = Math.random() * 2 - 1;
+                }
+
+                const noise = this.ctx.createBufferSource();
+                noise.buffer = buffer;
+
+                const filter = this.ctx.createBiquadFilter();
+                filter.type = 'lowpass';
+                filter.frequency.setValueAtTime(800, this.ctx.currentTime);
+                filter.frequency.exponentialRampToValueAtTime(50, this.ctx.currentTime + 0.5);
+
+                const gain = this.ctx.createGain();
+                gain.gain.setValueAtTime(1, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.5);
+
+                noise.connect(filter);
+                filter.connect(gain);
+                gain.connect(this.ctx.destination);
+
+                noise.start();
+                noise.stop(this.ctx.currentTime + 0.5);
+            }
+
+            playLockSound() {
+                if (!this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(440, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(880, this.ctx.currentTime + 0.1);
+                gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.1);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.1);
+            }
+
+            playCorrect() {
+                if (!this.ctx) return;
+                const notes = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6
+                notes.forEach((freq, idx) => {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(freq, this.ctx.currentTime + idx * 0.08);
+                    gain.gain.setValueAtTime(0.3, this.ctx.currentTime + idx * 0.08);
+                    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + idx * 0.08 + 0.2);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start(this.ctx.currentTime + idx * 0.08);
+                    osc.stop(this.ctx.currentTime + idx * 0.08 + 0.2);
+                });
+            }
+
+            playWrong() {
+                if (!this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(150, this.ctx.currentTime);
+                osc.frequency.linearRampToValueAtTime(80, this.ctx.currentTime + 0.3);
+                gain.gain.setValueAtTime(0.4, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.3);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.3);
+            }
+        }
+
+        const sfx = new SoundEffects();
+    </script>
+
+    <!-- GAME LOGIC & MEDIAPIPE HANDS IMPLEMENTATION -->
+    <script>
+        // --- BANK SOALAN PENDIDIKAN ISLAM TAHUN 1 (SUKU KATA TERBUKA & TERTUTUP) ---
+        const questionsData = [
+            {
+                id: 1,
+                title: "Buku",
+                type: "Terbuka + Terbuka",
+                svg: `<svg viewBox="0 0 100 100" class="w-full h-full"><path d="M20 30 Q50 20 80 30 L80 80 Q50 70 20 80 Z" fill="#3b82f6" stroke="#60a5fa" stroke-width="3"/><path d="M50 25 L50 75" stroke="#ffffff" stroke-width="3" stroke-dasharray="2 2"/><path d="M25 40 H45 M25 50 H45 M55 40 H75 M55 50 H75" stroke="#93c5fd" stroke-width="2"/></svg>`,
+                options: [
+                    { rumi: "Buku", jawi: "بوكو", correct: true },
+                    { rumi: "Buka", jawi: "بوكا", correct: false },
+                    { rumi: "Baki", jawi: "باقي", correct: false }
+                ]
+            },
+            {
+                id: 2,
+                title: "Nasi",
+                type: "Terbuka + Terbuka",
+                svg: `<svg viewBox="0 0 100 100" class="w-full h-full"><ellipse cx="50" cy="65" rx="35" ry="18" fill="#e2e8f0" stroke="#cbd5e1" stroke-width="3"/><path d="M20 60 Q50 25 80 60 Z" fill="#ffffff" stroke="#f1f5f9" stroke-width="2"/><circle cx="45" cy="45" r="2" fill="#94a3b8"/><circle cx="55" cy="50" r="2" fill="#94a3b8"/><circle cx="50" cy="38" r="2" fill="#94a3b8"/></svg>`,
+                options: [
+                    { rumi: "Nasi", jawi: "ناسي", correct: true },
+                    { rumi: "Naga", jawi: "ناݢ", correct: false },
+                    { rumi: "Nala", jawi: "نالا", correct: false }
+                ]
+            },
+            {
+                id: 3,
+                title: "Jam",
+                type: "Suku Kata Tertutup",
+                svg: `<svg viewBox="0 0 100 100" class="w-full h-full"><circle cx="50" cy="50" r="35" fill="#f59e0b" stroke="#fbbf24" stroke-width="4"/><circle cx="50" cy="50" r="30" fill="#1e293b"/><path d="M50 50 L50 30 M50 50 L65 50" stroke="#facc15" stroke-width="4" stroke-linecap="round"/><circle cx="50" cy="50" r="4" fill="#ef4444"/></svg>`,
+                options: [
+                    { rumi: "Jala", jawi: "جالا", correct: false },
+                    { rumi: "Jam", jawi: "جم", correct: true },
+                    { rumi: "Jari", jawi: "جاري", correct: false }
+                ]
+            },
+            {
+                id: 4,
+                title: "Pen",
+                type: "Suku Kata Tertutup",
+                svg: `<svg viewBox="0 0 100 100" class="w-full h-full"><path d="M25 75 L70 30 L80 40 L35 85 Z" fill="#06b6d4" stroke="#22d3ee" stroke-width="2"/><path d="M25 75 L15 85 L35 85 Z" fill="#94a3b8"/><path d="M15 85 L12 88 L18 88 Z" fill="#0f172a"/></svg>`,
+                options: [
+                    { rumi: "Pena", jawi: "پينا", correct: false },
+                    { rumi: "Pin", jawi: "ڤين", correct: false },
+                    { rumi: "Pen", jawi: "ڤين", correct: true }
+                ]
+            },
+            {
+                id: 5,
+                title: "Kuda",
+                type: "Terbuka + Terbuka",
+                svg: `<svg viewBox="0 0 100 100" class="w-full h-full"><path d="M30 75 C30 50 40 30 65 25 C75 25 80 35 70 45 C60 50 50 55 45 75 Z" fill="#b45309" stroke="#d97706" stroke-width="3"/><circle cx="68" cy="32" r="3" fill="#0f172a"/><path d="M60 25 C55 15 50 20 45 25" stroke="#78350f" stroke-width="4" fill="none"/></svg>`,
+                options: [
+                    { rumi: "Kuda", jawi: "كودا", correct: true },
+                    { rumi: "Kuku", jawi: "كوكو", correct: false },
+                    { rumi: "Kaki", jawi: "كاكي", correct: false }
+                ]
+            },
+            {
+                id: 6,
+                title: "Cat",
+                type: "Suku Kata Tertutup",
+                svg: `<svg viewBox="0 0 100 100" class="w-full h-full"><rect x="30" y="40" width="40" height="45" rx="5" fill="#ec4899" stroke="#f472b6" stroke-width="3"/><path d="M25 40 Q50 30 75 40" stroke="#e2e8f0" stroke-width="6" fill="none"/><path d="M40 20 L60 20 L60 40 L40 40 Z" fill="#cbd5e1"/></svg>`,
+                options: [
+                    { rumi: "Cawan", jawi: "چاون", correct: false },
+                    { rumi: "Cat", jawi: "چت", correct: true },
+                    { rumi: "Cili", jawi: "چيلي", correct: false }
+                ]
+            },
+            {
+                id: 7,
+                title: "Bola",
+                type: "Terbuka + Terbuka",
+                svg: `<svg viewBox="0 0 100 100" class="w-full h-full"><circle cx="50" cy="50" r="35" fill="#ef4444" stroke="#f87171" stroke-width="3"/><path d="M30 30 Q50 50 30 70 M70 30 Q50 50 70 70" stroke="#ffffff" stroke-width="4" fill="none"/></svg>`,
+                options: [
+                    { rumi: "Baju", jawi: "باجو", correct: false },
+                    { rumi: "Bulu", jawi: "بولو", correct: false },
+                    { rumi: "Bola", jawi: "بولا", correct: true }
+                ]
+            },
+            {
+                id: 8,
+                title: "Zabur / Kek",
+                type: "Suku Kata Tertutup",
+                svg: `<svg viewBox="0 0 100 100" class="w-full h-full"><path d="M20 70 L80 70 L75 40 L25 40 Z" fill="#10b981" stroke="#34d399" stroke-width="3"/><ellipse cx="50" cy="40" rx="25" ry="8" fill="#a7f3d0"/><path d="M50 40 L50 25" stroke="#f59e0b" stroke-width="3"/><circle cx="50" cy="22" r="4" fill="#ef4444"/></svg>`,
+                options: [
+                    { rumi: "Kek", jawi: "كيك", correct: true },
+                    { rumi: "Kera", jawi: "كرا", correct: false },
+                    { rumi: "Keju", jawi: "كيجو", correct: false }
+                ]
+            },
+            {
+                id: 9,
+                title: "Mata",
+                type: "Terbuka + Terbuka",
+                svg: `<svg viewBox="0 0 100 100" class="w-full h-full"><path d="M25 50 Q50 25 75 50 Q50 75 25 50 Z" fill="#ffffff" stroke="#cbd5e1" stroke-width="3"/><circle cx="50" cy="50" r="14" fill="#0284c7"/><circle cx="50" cy="50" r="6" fill="#0f172a"/></svg>`,
+                options: [
+                    { rumi: "Meja", jawi: "ميجا", correct: false },
+                    { rumi: "Mata", jawi: "مات", correct: true },
+                    { rumi: "Muka", jawi: "موكا", correct: false }
+                ]
+            },
+            {
+                id: 10,
+                title: "Bas",
+                type: "Suku Kata Tertutup",
+                svg: `<svg viewBox="0 0 100 100" class="w-full h-full"><rect x="20" y="35" width="60" height="35" rx="6" fill="#facc15" stroke="#eab308" stroke-width="3"/><rect x="25" y="42" width="15" height="12" rx="2" fill="#1e293b"/><rect x="45" y="42" width="15" height="12" rx="2" fill="#1e293b"/><rect x="65" y="42" width="10" height="12" rx="2" fill="#1e293b"/><circle cx="32" cy="70" r="7" fill="#334155"/><circle cx="68" cy="70" r="7" fill="#334155"/></svg>`,
+                options: [
+                    { rumi: "Bas", jawi: "بس", correct: true },
+                    { rumi: "Batu", jawi: "باتو", correct: false },
+                    { rumi: "Beca", jawi: "بيچا", correct: false }
+                ]
+            }
+        ];
+
+        // --- GAME VARIABLES & STATE ---
+        let currentQIndex = 0;
+        let score = 0;
+        let lives = 3;
+        let timer = 15;
+        let timerInterval = null;
+        let isGameActive = false;
+        
+        // Gesture Lock state
+        let lockedOptionIdx = -1;
+        let lockHoldTime = 0;
+        let lastGesture = 'NONE'; // 'OPEN' or 'FIST'
+        let fistTriggered = false;
+
+        // Visual Canvas Setup
+        const canvas = document.getElementById('effectsCanvas');
+        const ctx = canvas.getContext('2d');
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // Active Lightning Sparks Store
+        let lightningBolts = [];
+
+        // --- MEDIAPIPE HANDS SETUP ---
+        const videoElement = document.getElementById('webcam');
+        const webcamCanvas = document.getElementById('webcamCanvas');
+        const webcamCtx = webcamCanvas.getContext('2d');
+        const handCursor = document.getElementById('handCursor');
+        const gestureDot = document.getElementById('gestureDot');
+        const gestureLabel = document.getElementById('gestureLabel');
+
+        const hands = new Hands({
+            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+        });
+
+        hands.setOptions({
+            maxNumHands: 1,
+            modelComplexity: 1,
+            minDetectionConfidence: 0.6,
+            minTrackingConfidence: 0.6
+        });
+
+        hands.onResults(onHandResults);
+
+        // Start Webcam Feed via MediaPipe CameraUtils
+        const camera = new Camera(videoElement, {
+            onFrame: async () => {
+                await hands.send({ image: videoElement });
+            },
+            width: 640,
+            height: 480
+        });
+
+        camera.start().catch(err => {
+            console.warn("Webcam tidak ditemui atau dihalang access. Mod sentuhan/tetikus aktif.", err);
+            gestureLabel.innerText = "Webcam Tiada / Sentuhan sahaja";
+            gestureDot.className = "w-2.5 h-2.5 rounded-full bg-amber-500";
+        });
+
+        // Process Hand Tracking Results
+        function onHandResults(results) {
+            webcamCanvas.width = videoElement.videoWidth || 320;
+            webcamCanvas.height = videoElement.videoHeight || 240;
+            webcamCtx.save();
+            webcamCtx.clearRect(0, 0, webcamCanvas.width, webcamCanvas.height);
+
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                const landmarks = results.multiHandLandmarks[0];
+
+                // Lukis skeleton pada webcam canvas
+                drawConnectors(webcamCtx, landmarks, HAND_CONNECTIONS, { color: '#facc15', lineWidth: 2 });
+                drawLandmarks(webcamCtx, landmarks, { color: '#ef4444', lineWidth: 1, radius: 3 });
+
+                // Dapatkan koordinat Telunjuk (Index Finger Tip #8) & Ibu Jari (#4) / Tapak Tangan (#9)
+                const indexTip = landmarks[8];
+                const wrist = landmarks[0];
+
+                // Tukar koordinat normalized (0-1) ke skrin X, Y (Mirror horizontal X)
+                const screenX = (1 - indexTip.x) * window.innerWidth;
+                const screenY = indexTip.y * window.innerHeight;
+
+                // Kemaskini Kedudukan Penunjuk Cursor Custom
+                handCursor.classList.remove('hidden');
+                handCursor.style.left = `${screenX}px`;
+                handCursor.style.top = `${screenY}px`;
+
+                // Mengesan Gesture: OPEN PALM vs CLENCH FIST
+                const isFist = checkIsFist(landmarks);
+
+                if (isFist) {
+                    gestureDot.className = "w-2.5 h-2.5 rounded-full bg-red-500 animate-ping";
+                    gestureLabel.innerText = "PENUMPUK (SAMBAR PETIR!)";
+                    gestureLabel.className = "text-red-400 font-bold";
+                    
+                    handCursor.className = "cursor-fist flex items-center justify-center";
+
+                    if (!fistTriggered && isGameActive) {
+                        fistTriggered = true;
+                        triggerLightningAttack(screenX, screenY);
+                    }
+                } else {
+                    gestureDot.className = "w-2.5 h-2.5 rounded-full bg-emerald-400";
+                    gestureLabel.innerText = "TAPAK TERBUKA (KUNCI JAWAPAN)";
+                    gestureLabel.className = "text-emerald-300 font-medium";
+
+                    handCursor.className = "cursor-open flex items-center justify-center";
+                    fistTriggered = false; // reset trigger state
+
+                    // Hover checking to lock options
+                    checkHoverLock(screenX, screenY);
+                }
+            } else {
+                handCursor.classList.add('hidden');
+                gestureDot.className = "w-2.5 h-2.5 rounded-full bg-gray-500";
+                gestureLabel.innerText = "Mencari Tangan...";
+                gestureLabel.className = "text-slate-400 font-normal";
+            }
+            webcamCtx.restore();
+        }
+
+        // Formula algoritma jarak mudah untuk kesan Penumbuk (Clench Fist)
+        function checkIsFist(landmarks) {
+            // Bandingkan jarak hujung jari (8, 12, 16, 20) dengan pangkal tapak (wrist #0)
+            const wrist = landmarks[0];
+            const fingerTips = [8, 12, 16, 20];
+            let foldedFingers = 0;
+
+            fingerTips.forEach(tipIdx => {
+                const tip = landmarks[tipIdx];
+                const dist = Math.hypot(tip.x - wrist.x, tip.y - wrist.y);
+                if (dist < 0.32) { // Ambang kepekatan genggaman
+                    foldedFingers++;
+                }
+            });
+
+            return foldedFingers >= 3;
+        }
+
+        // Hover & Lock Logic
+        function checkHoverLock(x, y) {
+            if (!isGameActive) return;
+
+            const cards = document.querySelectorAll('.option-card');
+            let found = false;
+
+            cards.forEach((card, index) => {
+                const rect = card.getBoundingClientRect();
+                if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
+                    found = true;
+                    if (lockedOptionIdx !== index) {
+                        lockedOptionIdx = index;
+                        highlightLockedCard(index);
+                        sfx.playLockSound();
+                    }
+                }
+            });
+        }
+
+        function highlightLockedCard(index) {
+            const cards = document.querySelectorAll('.option-card');
+            cards.forEach((card, idx) => {
+                if (idx === index) {
+                    card.classList.add('locked');
+                } else {
+                    card.classList.remove('locked');
+                }
+            });
+        }
+
+        // Trigger Sambaran Petir apabila Genggaman dilakukan
+        function triggerLightningAttack(handX, handY) {
+            if (!isGameActive) return;
+
+            sfx.init();
+
+            if (lockedOptionIdx !== -1) {
+                const cards = document.querySelectorAll('.option-card');
+                const targetCard = cards[lockedOptionIdx];
+                if (!targetCard) return;
+
+                const rect = targetCard.getBoundingClientRect();
+                const targetX = rect.left + rect.width / 2;
+                const targetY = rect.top + rect.height / 2;
+
+                // CIpta kesan petir dari kedudukan tangan/atas skrin ke kad pilihan
+                createLightningBolt(handX || targetX, handY || 0, targetX, targetY);
+                createSlashEffect(targetX, targetY);
+                sfx.playThunder();
+
+                // Semak Jawapan
+                verifyAnswer(lockedOptionIdx);
+            }
+        }
+
+        // --- GAME LOGIC FUNCTIONS ---
+
+        function showStartModal() {
+            const modalContent = document.getElementById('modalContent');
+            modalContent.innerHTML = `
+                <div class="text-5xl mb-3 animate-bounce">⚡</div>
+                <h2 class="text-2xl font-black text-yellow-400 mb-2">LIGHTNING-THUNDER LOCK</h2>
+                <p class="text-sm text-slate-300 mb-4">Pendidikan Islam Tahun 1 (Suku Kata Terbuka & Tertutup)</p>
+                <div class="bg-slate-800/80 p-4 rounded-2xl text-left text-xs text-slate-300 space-y-2 border border-slate-700">
+                    <p class="font-bold text-yellow-300">🎮 Cara Bermain:</p>
+                    <p>1. 🖐️ <strong>Halakan tapak tangan</strong> pada kad jawapan untuk mengunci (Lock-On).</p>
+                    <p>2. ✊ <strong>Genggam tangan (Fist)</strong> untuk lancarkan sambaran petir!</p>
+                    <p>3. Jawab 10 soalan sebelum masa habis dan habiskan 3 nyawa!</p>
+                </div>
+            `;
+            document.getElementById('modalBtn').innerText = "MULA SEKARANG ⚡";
+            document.getElementById('gameModal').classList.remove('hidden');
+        }
+
+        function startGame() {
+            sfx.init();
+            document.getElementById('gameModal').classList.add('hidden');
+            score = 0;
+            lives = 3;
+            currentQIndex = 0;
+            isGameActive = true;
+            updateStatsUI();
+            loadQuestion();
+        }
+
+        function loadQuestion() {
+            if (currentQIndex >= questionsData.length) {
+                gameVictory();
+                return;
+            }
+
+            const q = questionsData[currentQIndex];
+            document.getElementById('questionNum').innerText = `Soalan ${currentQIndex + 1} / ${questionsData.length}`;
+            document.getElementById('syllableType').innerText = q.type;
+            document.getElementById('imageIllustration').innerHTML = q.svg;
+            document.getElementById('questionText').innerText = `Pilih ejaan Jawi/Rumi yang betul bagi "${q.title}":`;
+
+            // Render Pilihan Jawapan
+            const container = document.getElementById('optionsContainer');
+            container.innerHTML = '';
+            lockedOptionIdx = -1;
+
+            q.options.forEach((opt, idx) => {
+                const card = document.createElement('div');
+                card.className = `option-card bg-slate-800/80 border-2 border-slate-700 rounded-2xl p-4 flex justify-between items-center cursor-pointer hover:border-indigo-400 shadow-md`;
+                card.onclick = () => {
+                    lockedOptionIdx = idx;
+                    highlightLockedCard(idx);
+                    triggerLightningAttack(window.innerWidth / 2, window.innerHeight / 2);
+                };
+
+                card.innerHTML = `
+                    <div class="flex items-center gap-3">
+                        <span class="w-8 h-8 rounded-full bg-slate-700 text-yellow-400 font-bold flex items-center justify-center text-sm border border-slate-600">
+                            ${String.fromCharCode(65 + idx)}
+                        </span>
+                        <span class="text-lg md:text-xl font-bold text-slate-100">${opt.rumi}</span>
+                    </div>
+                    <span class="jawi-text text-2xl md:text-3xl font-bold text-amber-300">${opt.jawi}</span>
+                `;
+                container.appendChild(card);
+            });
+
+            // Reset Timer
+            resetTimer();
+        }
+
+        function resetTimer() {
+            clearInterval(timerInterval);
+            timer = 15;
+            document.getElementById('timerText').innerText = `${timer}s`;
+            
+            timerInterval = setInterval(() => {
+                if (!isGameActive) return;
+                timer--;
+                document.getElementById('timerText').innerText = `${timer}s`;
+
+                if (timer <= 0) {
+                    clearInterval(timerInterval);
+                    handleWrongAnswer("Masa Habis!");
+                }
+            }, 1000);
+        }
+
+        function verifyAnswer(selectedIndex) {
+            clearInterval(timerInterval);
+            const q = questionsData[currentQIndex];
+            const selectedOpt = q.options[selectedIndex];
+
+            if (selectedOpt && selectedOpt.correct) {
+                // Betul
+                sfx.playCorrect();
+                score += 10 + timer; // Bonus masa
+                updateStatsUI();
+
+                showFeedbackToast("SYABAS! BETUL ⚡", "success");
+
+                setTimeout(() => {
+                    currentQIndex++;
+                    loadQuestion();
+                }, 1200);
+            } else {
+                // Salah
+                handleWrongAnswer("JAWAPAN KURANG TEPAT!");
+            }
+        }
+
+        function handleWrongAnswer(msg) {
+            sfx.playWrong();
+            lives--;
+            updateStatsUI();
+            showFeedbackToast(msg, "error");
+
+            if (lives <= 0) {
+                setTimeout(gameOver, 1200);
+            } else {
+                setTimeout(() => {
+                    currentQIndex++;
+                    loadQuestion();
+                }, 1200);
+            }
+        }
+
+        function updateStatsUI() {
+            document.getElementById('scoreText').innerText = score;
+            const hearts = "❤️".repeat(Math.max(0, lives)) + "🖤".repeat(Math.max(0, 3 - lives));
+            document.getElementById('livesContainer').innerText = hearts;
+        }
+
+        function showFeedbackToast(msg, type) {
+            const toast = document.createElement('div');
+            toast.className = `fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 px-8 py-4 rounded-2xl text-2xl font-black z-50 shadow-2xl animate-bounce ${
+                type === 'success' ? 'bg-emerald-500 text-slate-950 border-4 border-emerald-300' : 'bg-rose-600 text-white border-4 border-rose-300'
+            }`;
+            toast.innerText = msg;
+            document.body.appendChild(toast);
+
+            setTimeout(() => toast.remove(), 1000);
+        }
+
+        function gameOver() {
+            isGameActive = false;
+            clearInterval(timerInterval);
+            const modalContent = document.getElementById('modalContent');
+            modalContent.innerHTML = `
+                <div class="text-6xl mb-3">💥</div>
+                <h2 class="text-3xl font-black text-rose-500 mb-2">GAME OVER</h2>
+                <p class="text-slate-300 text-sm mb-4">Cuba lagi! Nyawa anda telah habis.</p>
+                <div class="bg-slate-800 p-4 rounded-xl border border-slate-700 mb-2">
+                    <p class="text-xs text-slate-400">Jumlah Skor Akhir</p>
+                    <p class="text-4xl font-black text-yellow-400">${score}</p>
+                </div>
+            `;
+            document.getElementById('modalBtn').innerText = "CUBA LAGI 🔄";
+            document.getElementById('gameModal').classList.remove('hidden');
+        }
+
+        function gameVictory() {
+            isGameActive = false;
+            clearInterval(timerInterval);
+            const modalContent = document.getElementById('modalContent');
+            modalContent.innerHTML = `
+                <div class="text-6xl mb-3">🏆</div>
+                <h2 class="text-3xl font-black text-yellow-400 mb-2">TAHNIAH! JUARA PETIR!</h2>
+                <p class="text-slate-300 text-sm mb-4">Anda telah menguasai Suku Kata Terbuka & Tertutup!</p>
+                <div class="bg-slate-800 p-4 rounded-xl border border-slate-700 mb-2">
+                    <p class="text-xs text-slate-400">Skor Tertinggi Anda</p>
+                    <p class="text-4xl font-black text-emerald-400">${score}</p>
+                </div>
+            `;
+            document.getElementById('modalBtn').innerText = "MAIN SEMULA ⚡";
+            document.getElementById('gameModal').classList.remove('hidden');
+        }
+
+        // --- KESAN VISUAL PETIR (CANVAS ANIMATION) ---
+
+        function createLightningBolt(x1, y1, x2, y2) {
+            lightningBolts.push({
+                x1, y1, x2, y2,
+                opacity: 1,
+                branches: generateLightningPath(x1, y1, x2, y2)
+            });
+        }
+
+        function generateLightningPath(x1, y1, x2, y2) {
+            const path = [{ x: x1, y: y1 }];
+            const distance = Math.hypot(x2 - x1, y2 - y1);
+            const steps = Math.floor(distance / 15);
+
+            let currX = x1;
+            let currY = y1;
+
+            for (let i = 0; i < steps; i++) {
+                const targetX = x1 + (x2 - x1) * (i / steps);
+                const targetY = y1 + (y2 - y1) * (i / steps);
+
+                currX = targetX + (Math.random() - 0.5) * 30;
+                currY = targetY + (Math.random() - 0.5) * 30;
+
+                path.push({ x: currX, y: currY });
+            }
+            path.push({ x: x2, y: y2 });
+            return path;
+        }
+
+        function createSlashEffect(x, y) {
+            const slash = document.createElement('div');
+            slash.className = 'slash-effect';
+            slash.style.left = `${x - 75}px`;
+            slash.style.top = `${y - 5}px`;
+            document.body.appendChild(slash);
+
+            setTimeout(() => slash.remove(), 400);
+        }
+
+        // Render Loop Canvas
+        function renderLoop() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            for (let i = lightningBolts.length - 1; i >= 0; i--) {
+                const bolt = lightningBolts[i];
+
+                ctx.save();
+                ctx.beginPath();
+                ctx.strokeStyle = `rgba(250, 204, 21, ${bolt.opacity})`;
+                ctx.shadowColor = '#facc15';
+                ctx.shadowBlur = 20;
+                ctx.lineWidth = 4;
+
+                bolt.branches.forEach((pt, index) => {
+                    if (index === 0) ctx.moveTo(pt.x, pt.y);
+                    else ctx.lineTo(pt.x, pt.y);
+                });
+
+                ctx.stroke();
+                ctx.restore();
+
+                bolt.opacity -= 0.08;
+                if (bolt.opacity <= 0) {
+                    lightningBolts.splice(i, 1);
+                }
+            }
+
+            requestAnimationFrame(renderLoop);
+        }
+
+        // Inisialisasi Apabila Laman Dimuatkan
+        window.onload = () => {
+            showStartModal();
+            renderLoop();
+        };
+    </script>
+</body>
+</html>
